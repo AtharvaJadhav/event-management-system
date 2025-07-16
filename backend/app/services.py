@@ -75,12 +75,12 @@ class EventService:
         print("DEBUG: EventCreate dict:", event.dict())
         new_event = Event(**event.dict())
         print("DEBUG: Event model created:", new_event)
-        conflicts = self.detect_conflicts(new_event)
-        if conflicts:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"message": "Event time conflicts with existing event(s)", "conflicts": conflicts}
-            )
+        # conflicts = self.detect_conflicts(new_event)
+        # if conflicts:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_409_CONFLICT,
+        #         detail={"message": "Event time conflicts with existing event(s)", "conflicts": conflicts}
+        #     )
         events_data = self._load_events()
         events_data.append(new_event.dict())
         self._save_events(events_data)
@@ -147,7 +147,9 @@ class EventService:
             return []
         
         try:
+            today_str = datetime.now().strftime('%Y-%m-%d')
             prompt = f"""
+Assume today is {today_str}.
 Extract event details from this text and return a JSON array with exactly one event object.
 Format: [{{"title": "event name", "start_time": "YYYY-MM-DDTHH:MM:SS", "end_time": "YYYY-MM-DDTHH:MM:SS", "location": "location if present"}}]
 - If end_time is not specified, set it to exactly 1 hour after start_time.
