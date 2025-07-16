@@ -7,6 +7,7 @@ import uuid
 
 class EventStatus(str, Enum):
     DRAFT = "draft"
+    SCHEDULED = "scheduled"
     CONFIRMED = "confirmed"
     PUBLISHED = "published"
     ACTIVE = "active"

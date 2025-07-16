@@ -8,6 +8,9 @@ interface EventCardProps {
     event: Event;
     onEdit?: (event: Event) => void;
     onDelete?: (eventId: string) => void;
+    recentlyCreated?: boolean;
+    conflict?: boolean;
+    conflictWith?: string[];
 }
 
 const priorityColors = {
@@ -22,7 +25,7 @@ const statusColors = {
     completed: 'bg-green-100 text-green-800',
 };
 
-export default function EventCard({ event, onEdit, onDelete }: EventCardProps) {
+export default function EventCard({ event, onEdit, onDelete, recentlyCreated, conflict, conflictWith }: EventCardProps) {
     const formatDateTime = (dateString: string) => {
         try {
             const date = new Date(dateString);
@@ -33,9 +36,20 @@ export default function EventCard({ event, onEdit, onDelete }: EventCardProps) {
     };
 
     return (
-        <div className="card hover:shadow-md transition-shadow duration-200">
+        <div
+            className={`card hover:shadow-md transition-shadow duration-200 ${recentlyCreated ? 'ring-2 ring-green-400 ring-offset-2' : ''} ${conflict ? 'border-2 border-red-500' : ''}`}
+            title={conflict && conflictWith && conflictWith.length ? `Conflicts with: ${conflictWith.join(', ')}` : undefined}
+        >
             <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">{event.title}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    {event.title}
+                    {conflict && (
+                        <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full flex items-center gap-1">
+                            <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7 4a1 1 0 102 0 1 1 0 00-2 0zm.293-7.707a1 1 0 011.414 0l.007.007a1 1 0 01.293.7v3a1 1 0 11-2 0v-3a1 1 0 01.293-.707z" /></svg>
+                            Conflict
+                        </span>
+                    )}
+                </h3>
                 <div className="flex gap-2">
                     {onEdit && (
                         <button

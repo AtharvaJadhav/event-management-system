@@ -1,107 +1,66 @@
 # Event Management System
 
-A full-stack event management system that parses unstructured event text into structured calendar events, detects conflicts, and manages event lifecycles.
+A full-stack, AI-powered event management system that parses unstructured event text, detects conflicts, and manages your calendar in real time.
 
-## Architecture
+## 🚀 Features
 
-- **Backend**: FastAPI with async architecture and JSON file storage
-- **Frontend**: Next.js 14 with Tailwind CSS
-- **Infrastructure**: Docker Compose for local development
+- **LLM-Powered Parsing:** Converts natural language (emails, texts, etc.) into structured events using OpenAI GPT-3.5-turbo.
+- **Conflict Detection:** Prevents double-booking and highlights scheduling conflicts.
+- **Async Streaming:** Simulates real-time event ingestion (like emails/SMS) with a streaming processor.
+- **Modern UI:** Built with Next.js 14 and Tailwind CSS for a beautiful, responsive experience.
+- **Live System Stats:** See total events, recent creations, and more in real time.
 
-## Project Structure
+## 🛠️ Tech Stack
+- **Backend:** FastAPI, Python, OpenAI API
+- **Frontend:** Next.js 14, React, Tailwind CSS
+- **Persistence:** JSON file storage (easy to demo, no DB required)
 
-```
-event-management-system/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py         # FastAPI application
-│   │   ├── models.py       # Data models
-│   │   ├── services.py     # Business logic
-│   │   └── api/
-│   │       ├── __init__.py
-│   │       └── routes.py   # API endpoints
-│   ├── data/               # JSON file storage
-│   ├── requirements.txt    # Python dependencies
-│   └── Dockerfile
-├── frontend/               # Next.js frontend
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── page.tsx    # Homepage
-│   │   │   └── layout.tsx  # Root layout
-│   │   ├── components/     # React components
-│   │   ├── lib/           # Utilities and API client
-│   │   └── types/         # TypeScript types
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── Dockerfile
-├── docker-compose.yml      # Local development setup
-└── README.md
-```
+## ⚡ How to Run
 
-## Features
-
-- **Event Parsing**: Convert unstructured text to structured events
-- **Conflict Detection**: Identify scheduling conflicts
-- **Event Lifecycle Management**: Create, update, delete events
-- **JSON Storage**: Simple file-based data persistence
-- **Modern UI**: Clean, responsive interface with Tailwind CSS
-
-## Quick Start
-
-1. **Clone and setup**:
-   ```bash
-   git clone <repository-url>
+1. **Clone the repo:**
+   ```sh
+   git clone <your-repo-url>
    cd event-management-system
    ```
-
-2. **Run with Docker Compose**:
-   ```bash
-   docker-compose up --build
+2. **Set up OpenAI API Key:**
+   - Create a `.env` file in the project root:
+     ```env
+     OPENAI_API_KEY=sk-...
+     ```
+3. **Start the backend:**
+   ```sh
+   cd backend
+   python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
+4. **Start the frontend:**
+   ```sh
+   cd frontend
+   npm install
+   npm run dev
+   ```
+5. **Open the app:**
+   - Go to [http://localhost:3000](http://localhost:3000)
 
-3. **Access the application**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+## 🎬 Demo Flow
 
-## Development
+1. **Try the Event Parser:**
+   - Enter text like `Meeting tomorrow at 2pm` or `Lunch with Sarah Friday noon` and click **Parse Events**.
+   - The system will use AI to extract event details and check for conflicts.
+2. **Start Stream Processing:**
+   - Click **Start Processing** in the Stream Processing card.
+   - Watch as the system ingests a stream of realistic event messages in real time, parsing and creating events automatically.
+3. **See Live Stats:**
+   - Check the System Stats card for total events, recent creations, and more.
+4. **Spot Conflicts & Highlights:**
+   - Conflicting events are flagged, and newly created events are highlighted for 30 seconds.
+5. **Delete Events:**
+   - Use the trash icon to remove events instantly.
 
-### Backend Development
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+## 💡 Why This Rocks
+- **Real-world simulation:** Handles async, real-time event ingestion like a production system.
+- **AI at the core:** Uses LLMs for robust, flexible event parsing.
+- **Beautiful, modern UX:** Demo-ready for any audience.
 
-### Frontend Development
-```bash
-cd frontend
-npm install
-npm run dev
-```
+---
 
-## API Endpoints
-
-- `GET /health` - Health check
-- `GET /api/events` - List all events
-- `POST /api/events` - Create new event
-- `PUT /api/events/{id}` - Update event
-- `DELETE /api/events/{id}` - Delete event
-- `POST /api/events/parse` - Parse unstructured event text
-
-## Technologies Used
-
-- **Backend**: FastAPI, Pydantic, Uvicorn
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
-- **Infrastructure**: Docker, Docker Compose
-- **Storage**: JSON files (for simplicity)
-
-## Next Steps
-
-This foundation is ready for implementing:
-- Natural language event parsing
-- Conflict detection algorithms
-- Advanced event management features
-- Real-time updates
-- User authentication 
+**Built for demo impact.** 

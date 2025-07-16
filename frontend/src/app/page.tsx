@@ -5,6 +5,7 @@ import { Event } from '@/types/event';
 import { eventApi } from '@/lib/api';
 import EventCard from '@/components/EventCard';
 import EventParser from '@/components/EventParser';
+import StreamProcessor from '@/components/StreamProcessor';
 import { Calendar, Plus, RefreshCw } from 'lucide-react';
 
 export default function HomePage() {
@@ -54,6 +55,41 @@ export default function HomePage() {
         }
     };
 
+    // Helper: check if two events overlap
+    function timeOverlap(a: Event, b: Event) {
+        return (
+            new Date(a.start_time) < new Date(b.end_time) &&
+            new Date(a.end_time) > new Date(b.start_time)
+        );
+    }
+
+    // Detect conflicts and build a map of eventId -> [conflicting titles]
+    const conflictMap: Record<string, string[]> = {};
+    for (let i = 0; i < events.length; i++) {
+        for (let j = i + 1; j < events.length; j++) {
+            if (timeOverlap(events[i], events[j])) {
+                conflictMap[events[i].id] = conflictMap[events[i].id] || [];
+                conflictMap[events[j].id] = conflictMap[events[j].id] || [];
+                conflictMap[events[i].id].push(events[j].title);
+                conflictMap[events[j].id].push(events[i].title);
+            }
+        }
+    }
+    const conflictIds = Object.keys(conflictMap);
+    const conflictCount = conflictIds.length;
+    const successRate = events.length
+        ? Math.round(((events.length - conflictCount) / events.length) * 100)
+        : 100;
+
+    // Highlight events created in the last 30 seconds
+    const now = Date.now();
+    const recentlyCreatedIds = events
+        .filter(e => now - new Date(e.created_at).getTime() < 30_000)
+        .map(e => e.id);
+
+    // Placeholder: In a real system, you would fetch or compute conflictIds
+    // const conflictIds: string[] = []; // This line is now redundant as conflictIds is computed above
+
     return (
         <div className="container mx-auto px-4 py-8">
             {/* Header */}
@@ -65,6 +101,19 @@ export default function HomePage() {
                 <p className="text-gray-600 max-w-2xl mx-auto">
                     Parse unstructured event text, detect conflicts, and manage your calendar events with ease.
                 </p>
+            </div>
+
+            {/* Demo Guide */}
+            <div className="mb-8 max-w-2xl mx-auto p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h2 className="text-lg font-semibold mb-2 text-blue-800">Demo Guide</h2>
+                <ul className="list-disc pl-5 text-blue-900 text-sm mb-2">
+                    <li>This system parses unstructured event text (like emails or messages) into structured calendar events using AI.</li>
+                    <li>It detects scheduling conflicts and prevents double-booking.</li>
+                    <li>Try entering event text (e.g., <span className='font-mono bg-blue-100 px-1 rounded'>'Meeting tomorrow at 2pm'</span>) or start the stream processor to simulate real-time event ingestion.</li>
+                </ul>
+                <div className="text-blue-700 text-xs mt-2">
+                    <strong>Quick Instructions:</strong> Type an event description and click <span className='font-semibold'>Parse Events</span>, or click <span className='font-semibold'>Start Processing</span> to watch the system process a stream of events in real time!
+                </div>
             </div>
 
             {/* Error Display */}
@@ -80,10 +129,28 @@ export default function HomePage() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* System Stats Section */}
+            <div className="mb-6">
+                <div className="card bg-gray-50 border border-gray-200">
+                    <h3 className="text-lg font-semibold mb-2 text-gray-800">System Stats</h3>
+                    <div className="flex flex-wrap gap-6 text-sm text-gray-700">
+                        <div><span className="font-bold">Total Events:</span> {events.length}</div>
+                        <div><span className="font-bold">Recently Created:</span> {recentlyCreatedIds.length}</div>
+                        <div><span className="font-bold">Conflicts Detected:</span> {conflictCount}</div>
+                        <div><span className="font-bold">Success Rate:</span> {successRate}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Event Parser Section */}
                 <div className="lg:col-span-1">
                     <EventParser onEventsCreated={handleEventCreated} />
+                </div>
+
+                {/* Stream Processor Section */}
+                <div className="lg:col-span-1">
+                    <StreamProcessor />
                 </div>
 
                 {/* Events List Section */}
@@ -127,6 +194,9 @@ export default function HomePage() {
                                         key={event.id}
                                         event={event}
                                         onDelete={handleDeleteEvent}
+                                        recentlyCreated={recentlyCreatedIds.includes(event.id)}
+                                        conflict={conflictIds.includes(event.id)}
+                                        conflictWith={conflictMap[event.id] || []}
                                     />
                                 ))}
                             </div>

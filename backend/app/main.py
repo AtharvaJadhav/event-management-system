@@ -4,6 +4,10 @@ from contextlib import asynccontextmanager
 
 from .api.routes import router
 from .models import HealthResponse
+from .stream_processor import AsyncStreamProcessor
+
+# Global stream processor instance
+stream_processor = AsyncStreamProcessor()
 
 
 @asynccontextmanager
@@ -40,6 +44,24 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router, prefix="/api", tags=["api"])
+
+# Stream processing endpoints
+@app.post("/api/stream/start")
+async def start_stream():
+    """Start the async stream processor"""
+    stream_processor.start()
+    return {"status": "started", "message": "Stream processing started"}
+
+@app.post("/api/stream/stop")
+async def stop_stream():
+    """Stop the async stream processor"""
+    stream_processor.stop()
+    return {"status": "stopped", "message": "Stream processing stopped"}
+
+@app.get("/api/stream/status")
+async def get_stream_status():
+    """Get the current status of the stream processor"""
+    return stream_processor.status()
 
 
 @app.get("/", response_model=HealthResponse)
