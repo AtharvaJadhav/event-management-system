@@ -42,13 +42,25 @@ class EventService:
 
     def _save_events(self, events: List[Dict[str, Any]]):
         """Save events to JSON file"""
+        print(f"DEBUG: Writing to file path: {os.path.abspath(self.data_file)}")
+        print(f"DEBUG: Current working directory: {os.getcwd()}")
         data = {"events": events}
         self.data_file.write_text(json.dumps(data, indent=2, default=str))
 
     def get_all_events(self) -> List[Event]:
         """Get all events"""
         events_data = self._load_events()
-        return [Event(**event) for event in events_data]
+        print(f"DEBUG: Raw events data: {events_data}")
+        events = []
+        for event_data in events_data:
+            try:
+                event = Event(**event_data)
+                events.append(event)
+            except Exception as e:
+                print(f"DEBUG: Skipping corrupted event {event_data}: {e}")
+                # Skip corrupted events instead of failing
+                continue
+        return events
 
     def get_event_by_id(self, event_id: str) -> Optional[Event]:
         """Get event by ID"""
@@ -60,7 +72,9 @@ class EventService:
 
     def create_event(self, event: EventCreate) -> Event:
         """Create a new event, prevent conflicts"""
+        print("DEBUG: EventCreate dict:", event.dict())
         new_event = Event(**event.dict())
+        print("DEBUG: Event model created:", new_event)
         conflicts = self.detect_conflicts(new_event)
         if conflicts:
             raise HTTPException(
@@ -97,21 +111,27 @@ class EventService:
 
     def detect_conflicts(self, new_event: Event, exclude_event_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Detect scheduling conflicts with existing events"""
+        print("DEBUG: Starting detect_conflicts")
         conflicts = []
-        existing_events = self.get_all_events()
-        for existing_event in existing_events:
-            if exclude_event_id and existing_event.id == exclude_event_id:
-                continue
-            # Check for time overlap
-            if (
-                new_event.start_time < existing_event.end_time and
-                new_event.end_time > existing_event.start_time
-            ):
-                conflicts.append({
-                    "conflicting_event": existing_event.dict(),
-                    "conflict_type": "time_overlap",
-                    "message": f"Conflicts with '{existing_event.title}'"
-                })
+        try:
+            existing_events = self.get_all_events()
+            print(f"DEBUG: Loaded {len(existing_events)} existing events")
+            for existing_event in existing_events:
+                if exclude_event_id and existing_event.id == exclude_event_id:
+                    continue
+                # Check for time overlap
+                if (
+                    new_event.start_time < existing_event.end_time and
+                    new_event.end_time > existing_event.start_time
+                ):
+                    conflicts.append({
+                        "conflicting_event": existing_event.dict(),
+                        "conflict_type": "time_overlap",
+                        "message": f"Conflicts with '{existing_event.title}'"
+                    })
+        except Exception as e:
+            print(f"DEBUG: Error in detect_conflicts: {e}")
+            raise
         return conflicts
 
     def check_conflicts(self, event: EventCreate) -> List[Dict[str, Any]]:

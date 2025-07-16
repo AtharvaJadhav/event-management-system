@@ -17,10 +17,24 @@ async def health_check():
     return HealthResponse()
 
 
-@router.get("/events", response_model=List[Event])
+@router.get("/events")
 async def get_events():
     """Get all events"""
-    return event_service.get_all_events()
+    try:
+        events = event_service.get_all_events()
+        # Serialize all events
+        events_serialized = []
+        for event in events:
+            event_dict = event.dict()
+            event_dict["start_time"] = event_dict["start_time"].isoformat()
+            event_dict["end_time"] = event_dict["end_time"].isoformat()
+            event_dict["created_at"] = event_dict["created_at"].isoformat()
+            event_dict["updated_at"] = event_dict["updated_at"].isoformat()
+            events_serialized.append(event_dict)
+        return events_serialized
+    except Exception as e:
+        print(f"ERROR in get_events endpoint: {e}")
+        return {"error": str(e)}
 
 
 @router.get("/events/{event_id}", response_model=Event)
@@ -43,11 +57,18 @@ async def check_event_conflicts(event: EventCreate):
         return {"conflicts": conflicts, "has_conflict": True}
     return {"conflicts": [], "has_conflict": False}
 
-@router.post("/events", response_model=Event, status_code=status.HTTP_201_CREATED)
+@router.post("/events", status_code=status.HTTP_201_CREATED)
 async def create_event(event: EventCreate, request: Request):
     """Create a new event, prevent conflicts"""
     try:
-        return event_service.create_event(event)
+        created_event = event_service.create_event(event)
+        # Serialize the event for response
+        event_dict = created_event.dict()
+        event_dict["start_time"] = event_dict["start_time"].isoformat()
+        event_dict["end_time"] = event_dict["end_time"].isoformat()
+        event_dict["created_at"] = event_dict["created_at"].isoformat()
+        event_dict["updated_at"] = event_dict["updated_at"].isoformat()
+        return event_dict
     except HTTPException as e:
         if e.status_code == status.HTTP_409_CONFLICT:
             return fastapi.responses.JSONResponse(
@@ -55,6 +76,12 @@ async def create_event(event: EventCreate, request: Request):
                 content={"error": e.detail["message"], "conflicts": e.detail["conflicts"]}
             )
         raise
+    except Exception as e:
+        print(f"ERROR in create_event endpoint: {e}")
+        return fastapi.responses.JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 
 @router.put("/events/{event_id}", response_model=Event)
@@ -91,13 +118,37 @@ async def delete_event(event_id: str):
 async def parse_event_text(request: EventParseRequest):
     try:
         events = event_service.parse_event_text(request.text)
-        # Convert all events to dicts with ISO-formatted datetimes
-        events_serialized = [event.dict() for event in events]
+        
+        # Save events to JSON file
+        saved_events = []
+        for event in events:
+            try:
+                # Convert Event to EventCreate and save
+                event_create = EventCreate(**event.dict())
+                saved_event = event_service.create_event(event_create)
+                print(f"DEBUG: Saved event to JSON: {saved_event.title}")
+                saved_events.append(saved_event)
+            except HTTPException as e:
+                if e.status_code == status.HTTP_409_CONFLICT:
+                    print(f"DEBUG: Conflict detected for event: {event.title}")
+                    # Return conflict info but don't save the event
+                    return {
+                        "success": False,
+                        "error": "Event conflicts with existing events",
+                        "conflicts": e.detail["conflicts"],
+                        "events": []
+                    }
+                else:
+                    raise
+        
+        # Convert all saved events to dicts with ISO-formatted datetimes
+        events_serialized = [event.dict() for event in saved_events]
         for e in events_serialized:
             e["start_time"] = e["start_time"].isoformat() if hasattr(e["start_time"], "isoformat") else e["start_time"]
             e["end_time"] = e["end_time"].isoformat() if hasattr(e["end_time"], "isoformat") else e["end_time"]
             e["created_at"] = e["created_at"].isoformat() if hasattr(e["created_at"], "isoformat") else e["created_at"]
             e["updated_at"] = e["updated_at"].isoformat() if hasattr(e["updated_at"], "isoformat") else e["updated_at"]
+        
         return {
             "success": True,
             "events": events_serialized,
