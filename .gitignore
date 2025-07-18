@@ -165,5 +165,12 @@ dmypy.json
 backend/data/*.json
 !backend/data/.gitkeep
 
+# Google Calendar credentials and tokens
+backend/credentials.json
+backend/token.json
+*.json.key
+gcp-oauth.keys.json
+gcp-oauth.keys.example.json
+
 # Docker
 .dockerignore 
