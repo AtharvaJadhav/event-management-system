@@ -7,6 +7,7 @@ from ..models import (
     EventParseResponse, HealthResponse
 )
 from ..services import event_service
+from ..google_calendar import google_calendar_service
 
 router = APIRouter()
 
@@ -178,3 +179,105 @@ async def parse_and_create_events(request: EventParseRequest):
             created_events.append(created_event)
     
     return created_events 
+
+# Google Calendar Integration Endpoints
+
+@router.get("/auth/google")
+async def initiate_google_auth():
+    """Initiate Google OAuth flow"""
+    try:
+        success = google_calendar_service.authenticate()
+        if success:
+            return {"status": "authenticated", "message": "Successfully authenticated with Google Calendar"}
+        else:
+            return {"status": "failed", "message": "Failed to authenticate with Google Calendar"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication error: {str(e)}"
+        )
+
+@router.get("/auth/status")
+async def check_auth_status():
+    """Check if user is authenticated with Google Calendar"""
+    try:
+        if google_calendar_service.service:
+            return {"status": "authenticated", "message": "User is authenticated"}
+        else:
+            return {"status": "not_authenticated", "message": "User is not authenticated"}
+    except Exception as e:
+        return {"status": "error", "message": f"Error checking auth status: {str(e)}"}
+
+@router.get("/calendar/events")
+async def get_google_calendar_events():
+    """Fetch events from Google Calendar"""
+    try:
+        events = google_calendar_service.get_events()
+        return {
+            "status": "success",
+            "events": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch Google Calendar events: {str(e)}"
+        )
+
+@router.post("/calendar/events")
+async def create_google_calendar_event(event: EventCreate):
+    """Create a new event in Google Calendar"""
+    try:
+        google_event = google_calendar_service.create_event(event)
+        if google_event:
+            return {
+                "status": "success",
+                "message": "Event created in Google Calendar",
+                "event": google_event
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create event in Google Calendar"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create Google Calendar event: {str(e)}"
+        )
+
+@router.delete("/calendar/events/{event_id}")
+async def delete_google_calendar_event(event_id: str):
+    """Delete an event from Google Calendar"""
+    try:
+        success = google_calendar_service.delete_event(event_id)
+        if success:
+            return {"status": "success", "message": "Event deleted from Google Calendar"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete event from Google Calendar"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete Google Calendar event: {str(e)}"
+        )
+
+@router.get("/calendar/sync")
+async def sync_google_calendar():
+    """Sync events from Google Calendar and detect conflicts with local events"""
+    try:
+        sync_result = google_calendar_service.sync_events()
+        return {
+            "status": "success",
+            "message": "Google Calendar sync completed",
+            "synced_count": sync_result["synced_count"],
+            "google_events": sync_result["google_events"],
+            "conflicts": sync_result["conflicts"]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync with Google Calendar: {str(e)}"
+        ) 
