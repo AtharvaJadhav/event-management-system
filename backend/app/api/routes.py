@@ -37,6 +37,16 @@ async def get_events():
         print(f"ERROR in get_events endpoint: {e}")
         return {"error": str(e)}
 
+@router.get("/storage/status")
+async def get_storage_status():
+    """Get the current storage status (Google Calendar vs JSON)"""
+    try:
+        status = event_service.get_storage_status()
+        return status
+    except Exception as e:
+        print(f"ERROR in get_storage_status endpoint: {e}")
+        return {"error": str(e)}
+
 
 @router.get("/events/{event_id}", response_model=Event)
 async def get_event(event_id: str):

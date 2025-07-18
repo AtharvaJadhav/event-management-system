@@ -102,6 +102,12 @@ export default function EventCard({ event, onEdit, onDelete, recentlyCreated, co
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[event.status]}`}>
                     {event.status}
                 </span>
+                {event.google_calendar_id && (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
+                        <Calendar size={12} />
+                        Google
+                    </span>
+                )}
             </div>
         </div>
     );

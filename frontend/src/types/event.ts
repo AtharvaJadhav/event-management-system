@@ -9,6 +9,7 @@ export interface Event {
   status: 'scheduled' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;
+  google_calendar_id?: string;
 }
 
 export interface EventCreate {

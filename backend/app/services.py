@@ -14,6 +14,9 @@ from .models import Event, EventCreate, EventUpdate, EventParseRequest
 import openai
 from fastapi import HTTPException, status
 
+# Google Calendar integration
+from .google_calendar import google_calendar_service
+
 # Load environment variables from project root
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -33,7 +36,7 @@ class EventService:
             self.data_file.write_text('{"events": []}')
 
     def _load_events(self) -> List[Dict[str, Any]]:
-        """Load events from JSON file"""
+        """Load events from JSON file (fallback)"""
         try:
             data = json.loads(self.data_file.read_text())
             return data.get("events", [])
@@ -41,29 +44,100 @@ class EventService:
             return []
 
     def _save_events(self, events: List[Dict[str, Any]]):
-        """Save events to JSON file"""
+        """Save events to JSON file (fallback)"""
         print(f"DEBUG: Writing to file path: {os.path.abspath(self.data_file)}")
         print(f"DEBUG: Current working directory: {os.getcwd()}")
         data = {"events": events}
         self.data_file.write_text(json.dumps(data, indent=2, default=str))
 
+    def _google_calendar_available(self) -> bool:
+        """Check if Google Calendar is available and authenticated"""
+        try:
+            return google_calendar_service.service is not None
+        except:
+            return False
+
+    def _convert_google_event_to_event(self, google_event: Dict[str, Any]) -> Event:
+        """Convert Google Calendar event format to our Event model"""
+        try:
+            # Parse datetime strings
+            start_time = date_parser.parse(google_event['start_time'])
+            end_time = date_parser.parse(google_event['end_time'])
+            
+            # Create Event object
+            event_data = {
+                'id': google_event['id'],
+                'title': google_event['title'],
+                'description': google_event.get('description'),
+                'start_time': start_time,
+                'end_time': end_time,
+                'location': google_event.get('location'),
+                'priority': 'medium',  # Default for Google Calendar events
+                'status': 'confirmed',  # Default for Google Calendar events
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow(),
+                'google_calendar_id': google_event['google_calendar_id']
+            }
+            
+            return Event(**event_data)
+        except Exception as e:
+            print(f"Error converting Google event: {e}")
+            raise
+
     def get_all_events(self) -> List[Event]:
-        """Get all events"""
+        """Get all events - try Google Calendar first, fallback to JSON"""
+        events = []
+        
+        # Try Google Calendar first
+        if self._google_calendar_available():
+            try:
+                print("DEBUG: Fetching events from Google Calendar")
+                google_events = google_calendar_service.get_events()
+                
+                for google_event in google_events:
+                    try:
+                        event = self._convert_google_event_to_event(google_event)
+                        events.append(event)
+                    except Exception as e:
+                        print(f"DEBUG: Error converting Google event {google_event.get('title', 'Unknown')}: {e}")
+                        continue
+                
+                print(f"DEBUG: Loaded {len(events)} events from Google Calendar")
+                return events
+                
+            except Exception as e:
+                print(f"DEBUG: Google Calendar failed, falling back to JSON: {e}")
+        
+        # Fallback to JSON
+        print("DEBUG: Using JSON fallback for events")
         events_data = self._load_events()
         print(f"DEBUG: Raw events data: {events_data}")
-        events = []
+        
         for event_data in events_data:
             try:
                 event = Event(**event_data)
                 events.append(event)
             except Exception as e:
                 print(f"DEBUG: Skipping corrupted event {event_data}: {e}")
-                # Skip corrupted events instead of failing
                 continue
+        
         return events
 
     def get_event_by_id(self, event_id: str) -> Optional[Event]:
-        """Get event by ID"""
+        """Get event by ID - try Google Calendar first, then JSON"""
+        # Try Google Calendar first
+        if self._google_calendar_available():
+            try:
+                # Note: This would need a specific Google Calendar API call
+                # For now, get all events and filter
+                all_events = self.get_all_events()
+                for event in all_events:
+                    if event.id == event_id:
+                        return event
+            except Exception as e:
+                print(f"DEBUG: Google Calendar lookup failed: {e}")
+        
+        # Fallback to JSON
         events_data = self._load_events()
         for event_data in events_data:
             if event_data.get("id") == event_id:
@@ -71,23 +145,52 @@ class EventService:
         return None
 
     def create_event(self, event: EventCreate) -> Event:
-        """Create a new event, prevent conflicts"""
+        """Create a new event - try Google Calendar first, fallback to JSON"""
         print("DEBUG: EventCreate dict:", event.dict())
         new_event = Event(**event.dict())
         print("DEBUG: Event model created:", new_event)
-        # conflicts = self.detect_conflicts(new_event)
-        # if conflicts:
-        #     raise HTTPException(
-        #         status_code=status.HTTP_409_CONFLICT,
-        #         detail={"message": "Event time conflicts with existing event(s)", "conflicts": conflicts}
-        #     )
+        
+        # Check for conflicts
+        conflicts = self.detect_conflicts(new_event)
+        if conflicts:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"message": "Event time conflicts with existing event(s)", "conflicts": conflicts}
+            )
+        
+        # Try Google Calendar first
+        if self._google_calendar_available():
+            try:
+                print("DEBUG: Creating event in Google Calendar")
+                google_event = google_calendar_service.create_event(event)
+                if google_event:
+                    # Update our event with Google Calendar ID
+                    new_event.id = google_event['id']
+                    new_event.google_calendar_id = google_event['google_calendar_id']
+                    print(f"DEBUG: Created event in Google Calendar: {new_event.title}")
+                    return new_event
+            except Exception as e:
+                print(f"DEBUG: Google Calendar creation failed, falling back to JSON: {e}")
+        
+        # Fallback to JSON
+        print("DEBUG: Creating event in JSON storage")
         events_data = self._load_events()
         events_data.append(new_event.dict())
         self._save_events(events_data)
         return new_event
 
     def update_event(self, event_id: str, event_update: EventUpdate) -> Optional[Event]:
-        """Update an existing event"""
+        """Update an existing event - try Google Calendar first, fallback to JSON"""
+        # Try Google Calendar first
+        if self._google_calendar_available():
+            try:
+                # Note: This would need specific Google Calendar API update call
+                # For now, fallback to JSON
+                pass
+            except Exception as e:
+                print(f"DEBUG: Google Calendar update failed: {e}")
+        
+        # Fallback to JSON
         events_data = self._load_events()
         for i, event_data in enumerate(events_data):
             if event_data.get("id") == event_id:
@@ -100,7 +203,21 @@ class EventService:
         return None
 
     def delete_event(self, event_id: str) -> bool:
-        """Delete an event"""
+        """Delete an event - try Google Calendar first, fallback to JSON"""
+        # Try Google Calendar first
+        if self._google_calendar_available():
+            try:
+                # Check if this is a Google Calendar event
+                event = self.get_event_by_id(event_id)
+                if event and hasattr(event, 'google_calendar_id') and event.google_calendar_id:
+                    success = google_calendar_service.delete_event(event.google_calendar_id)
+                    if success:
+                        print(f"DEBUG: Deleted event from Google Calendar: {event.title}")
+                        return True
+            except Exception as e:
+                print(f"DEBUG: Google Calendar deletion failed: {e}")
+        
+        # Fallback to JSON
         events_data = self._load_events()
         for i, event_data in enumerate(events_data):
             if event_data.get("id") == event_id:
@@ -138,6 +255,15 @@ class EventService:
         """Check for conflicts without creating event"""
         new_event = Event(**event.dict())
         return self.detect_conflicts(new_event)
+
+    def get_storage_status(self) -> Dict[str, Any]:
+        """Get the current storage status (Google Calendar vs JSON)"""
+        google_available = self._google_calendar_available()
+        return {
+            "primary_storage": "google_calendar" if google_available else "json",
+            "google_calendar_available": google_available,
+            "fallback_available": True
+        }
 
     def parse_event_text(self, text: str) -> List[Event]:
         """Parse unstructured event text into structured events using OpenAI LLM"""

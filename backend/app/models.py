@@ -55,6 +55,7 @@ class Event(EventBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    google_calendar_id: Optional[str] = Field(None, description="Google Calendar event ID if synced")
 
     class Config:
         json_encoders = {

@@ -6,6 +6,7 @@ import { eventApi } from '@/lib/api';
 import EventCard from '@/components/EventCard';
 import EventParser from '@/components/EventParser';
 import StreamProcessor from '@/components/StreamProcessor';
+import GoogleCalendarStatus from '@/components/GoogleCalendarStatus';
 import { Calendar, Plus, RefreshCw } from 'lucide-react';
 
 export default function HomePage() {
@@ -142,10 +143,15 @@ export default function HomePage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                 {/* Event Parser Section */}
                 <div className="lg:col-span-1">
                     <EventParser onEventsCreated={handleEventCreated} />
+                </div>
+
+                {/* Google Calendar Status Section */}
+                <div className="lg:col-span-1">
+                    <GoogleCalendarStatus />
                 </div>
 
                 {/* Stream Processor Section */}
