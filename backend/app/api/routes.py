@@ -47,6 +47,18 @@ async def get_storage_status():
         print(f"ERROR in get_storage_status endpoint: {e}")
         return {"error": str(e)}
 
+@router.get("/mcp/status")
+async def get_mcp_status():
+    """Get MCP connection status"""
+    from app.mcp_client import mcp_client
+    return {
+        "mcp_connected": mcp_client.initialized,
+        "mcp_server_available": True,  # Since we're using direct API fallback
+        "primary_storage": "google_calendar",
+        "fallback_storage": "json",
+        "connection_health": "excellent" if mcp_client.initialized else "disconnected"
+    }
+
 
 @router.get("/events/{event_id}", response_model=Event)
 async def get_event(event_id: str):
@@ -128,32 +140,10 @@ async def delete_event(event_id: str):
 @router.post("/events/parse")
 async def parse_event_text(request: EventParseRequest):
     try:
-        events = event_service.parse_event_text(request.text)
+        events = await event_service.parse_event_text(request.text)
         
-        # Save events to JSON file
-        saved_events = []
-        for event in events:
-            try:
-                # Convert Event to EventCreate and save
-                event_create = EventCreate(**event.dict())
-                saved_event = await event_service.create_event(event_create)
-                print(f"DEBUG: Saved event to JSON: {saved_event.title}")
-                saved_events.append(saved_event)
-            except HTTPException as e:
-                if e.status_code == status.HTTP_409_CONFLICT:
-                    print(f"DEBUG: Conflict detected for event: {event.title}")
-                    # Return conflict info but don't save the event
-                    return {
-                        "success": False,
-                        "error": "Event conflicts with existing events",
-                        "conflicts": e.detail["conflicts"],
-                        "events": []
-                    }
-                else:
-                    raise
-        
-        # Convert all saved events to dicts with ISO-formatted datetimes
-        events_serialized = [event.dict() for event in saved_events]
+        # Convert events to dicts with ISO-formatted datetimes
+        events_serialized = [event.dict() for event in events]
         for e in events_serialized:
             e["start_time"] = e["start_time"].isoformat() if hasattr(e["start_time"], "isoformat") else e["start_time"]
             e["end_time"] = e["end_time"].isoformat() if hasattr(e["end_time"], "isoformat") else e["end_time"]

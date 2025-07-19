@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field, validator
 from enum import Enum
@@ -30,6 +30,13 @@ class EventBase(BaseModel):
     priority: EventPriority = EventPriority.MEDIUM
     status: EventStatus = EventStatus.DRAFT
 
+    @validator('start_time', 'end_time')
+    def ensure_timezone_aware(cls, v):
+        """Ensure datetime is timezone-aware"""
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
     @validator('end_time')
     def end_after_start(cls, v, values):
         if 'start_time' in values and v <= values['start_time']:
@@ -53,8 +60,8 @@ class EventUpdate(BaseModel):
 
 class Event(EventBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     google_calendar_id: Optional[str] = Field(None, description="Google Calendar event ID if synced")
 
     class Config:
@@ -80,5 +87,5 @@ class EventParseResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "healthy"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: str = "1.0.0" 

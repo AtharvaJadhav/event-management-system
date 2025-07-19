@@ -6,7 +6,7 @@ import { eventApi } from '@/lib/api';
 import EventCard from '@/components/EventCard';
 import EventParser from '@/components/EventParser';
 import StreamProcessor from '@/components/StreamProcessor';
-import GoogleCalendarStatus from '@/components/GoogleCalendarStatus';
+import StatusIndicator from '@/components/StatusIndicator';
 import { Calendar, Plus, RefreshCw } from 'lucide-react';
 
 export default function HomePage() {
@@ -88,33 +88,20 @@ export default function HomePage() {
         .filter(e => now - new Date(e.created_at).getTime() < 30_000)
         .map(e => e.id);
 
-    // Placeholder: In a real system, you would fetch or compute conflictIds
-    // const conflictIds: string[] = []; // This line is now redundant as conflictIds is computed above
-
     return (
         <div className="container mx-auto px-4 py-8">
             {/* Header */}
             <div className="text-center mb-8">
-                <div className="flex items-center justify-center gap-3 mb-4">
-                    <Calendar className="h-8 w-8 text-primary-600" />
-                    <h1 className="text-3xl font-bold text-gray-900">Event Management System</h1>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-center gap-3 flex-1">
+                        <Calendar className="h-8 w-8 text-primary-600" />
+                        <h1 className="text-3xl font-bold text-gray-900">Event Management System</h1>
+                    </div>
+                    <StatusIndicator />
                 </div>
                 <p className="text-gray-600 max-w-2xl mx-auto">
                     Parse unstructured event text, detect conflicts, and manage your calendar events with ease.
                 </p>
-            </div>
-
-            {/* Demo Guide */}
-            <div className="mb-8 max-w-2xl mx-auto p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h2 className="text-lg font-semibold mb-2 text-blue-800">Demo Guide</h2>
-                <ul className="list-disc pl-5 text-blue-900 text-sm mb-2">
-                    <li>This system parses unstructured event text (like emails or messages) into structured calendar events using AI.</li>
-                    <li>It detects scheduling conflicts and prevents double-booking.</li>
-                    <li>Try entering event text (e.g., <span className='font-mono bg-blue-100 px-1 rounded'>'Meeting tomorrow at 2pm'</span>) or start the stream processor to simulate real-time event ingestion.</li>
-                </ul>
-                <div className="text-blue-700 text-xs mt-2">
-                    <strong>Quick Instructions:</strong> Type an event description and click <span className='font-semibold'>Parse Events</span>, or click <span className='font-semibold'>Start Processing</span> to watch the system process a stream of events in real time!
-                </div>
             </div>
 
             {/* Error Display */}
@@ -143,15 +130,10 @@ export default function HomePage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Event Parser Section */}
                 <div className="lg:col-span-1">
                     <EventParser onEventsCreated={handleEventCreated} />
-                </div>
-
-                {/* Google Calendar Status Section */}
-                <div className="lg:col-span-1">
-                    <GoogleCalendarStatus />
                 </div>
 
                 {/* Stream Processor Section */}
@@ -160,7 +142,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Events List Section */}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-1">
                     <div className="card">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-semibold">Events ({events.length})</h2>
@@ -194,7 +176,7 @@ export default function HomePage() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-4">
                                 {events.map((event) => (
                                     <EventCard
                                         key={event.id}

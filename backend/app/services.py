@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import re
@@ -62,9 +62,15 @@ class EventService:
     def _convert_google_event_to_event(self, google_event: Dict[str, Any]) -> Event:
         """Convert Google Calendar event format to our Event model"""
         try:
-            # Parse datetime strings
+            # Parse datetime strings and ensure timezone awareness
             start_time = date_parser.parse(google_event['start_time'])
             end_time = date_parser.parse(google_event['end_time'])
+            
+            # Ensure timezone awareness
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
             
             # Create Event object
             event_data = {
@@ -76,8 +82,8 @@ class EventService:
                 'location': google_event.get('location'),
                 'priority': 'medium',  # Default for Google Calendar events
                 'status': 'confirmed',  # Default for Google Calendar events
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow(),
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc),
                 'google_calendar_id': google_event['google_calendar_id']
             }
             
@@ -93,6 +99,12 @@ class EventService:
             start_time = date_parser.parse(mcp_event['start']['dateTime'] if 'dateTime' in mcp_event['start'] else mcp_event['start']['date'])
             end_time = date_parser.parse(mcp_event['end']['dateTime'] if 'dateTime' in mcp_event['end'] else mcp_event['end']['date'])
             
+            # Ensure timezone awareness
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            
             # Create Event object
             event_data = {
                 'id': mcp_event['id'],
@@ -103,8 +115,8 @@ class EventService:
                 'location': mcp_event.get('location'),
                 'priority': 'medium',  # Default for Google Calendar events
                 'status': 'confirmed',  # Default for Google Calendar events
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow(),
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc),
                 'google_calendar_id': mcp_event['id']
             }
             
@@ -209,9 +221,11 @@ class EventService:
 
     async def create_event(self, event: EventCreate) -> Event:
         """Create a new event - try MCP client first, then direct API, fallback to JSON"""
-        print("DEBUG: EventCreate dict:", event.dict())
-        new_event = Event(**event.dict())
-        print("DEBUG: Event model created:", new_event)
+        # Create new event with timezone-aware timestamps
+        event_dict = event.dict()
+        event_dict['created_at'] = datetime.now(timezone.utc)
+        event_dict['updated_at'] = datetime.now(timezone.utc)
+        new_event = Event(**event_dict)
         
         # Check for conflicts
         conflicts = await self.detect_conflicts(new_event)
@@ -288,7 +302,7 @@ class EventService:
             if event_data.get("id") == event_id:
                 # Update only provided fields
                 update_data = event_update.dict(exclude_unset=True)
-                update_data["updated_at"] = datetime.utcnow()
+                update_data["updated_at"] = datetime.now(timezone.utc)
                 events_data[i].update(update_data)
                 self._save_events(events_data)
                 return Event(**events_data[i])
@@ -333,11 +347,9 @@ class EventService:
 
     async def detect_conflicts(self, new_event: Event, exclude_event_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Detect scheduling conflicts with existing events"""
-        print("DEBUG: Starting detect_conflicts")
         conflicts = []
         try:
             existing_events = await self.get_all_events()
-            print(f"DEBUG: Loaded {len(existing_events)} existing events")
             for existing_event in existing_events:
                 if exclude_event_id and existing_event.id == exclude_event_id:
                     continue
@@ -358,7 +370,10 @@ class EventService:
 
     async def check_conflicts(self, event: EventCreate) -> List[Dict[str, Any]]:
         """Check for conflicts without creating event"""
-        new_event = Event(**event.dict())
+        event_dict = event.dict()
+        event_dict['created_at'] = datetime.now(timezone.utc)
+        event_dict['updated_at'] = datetime.now(timezone.utc)
+        new_event = Event(**event_dict)
         return await self.detect_conflicts(new_event)
 
     def get_storage_status(self) -> Dict[str, Any]:
@@ -370,11 +385,9 @@ class EventService:
             "fallback_available": True
         }
 
-    def parse_event_text(self, text: str) -> List[Event]:
+    async def parse_event_text(self, text: str) -> List[Event]:
         """Parse unstructured event text into structured events using OpenAI LLM"""
-        print(f"DEBUG: OPENAI_API_KEY present: {bool(OPENAI_API_KEY)}")
         if not OPENAI_API_KEY:
-            print("DEBUG: No OpenAI API key found, returning empty list")
             return []
         
         try:
@@ -389,8 +402,6 @@ Format: [{{"title": "event name", "start_time": "YYYY-MM-DDTHH:MM:SS", "end_time
 
 Text: {text}
 """
-            print(f"DEBUG: Sending prompt to OpenAI: {prompt[:100]}...")
-            
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
@@ -398,24 +409,46 @@ Text: {text}
                 max_tokens=512,
             )
             content = response.choices[0].message.content.strip()
-            print(f"DEBUG: OpenAI response: {content}")
             
             # Try to extract JSON from the response
             try:
                 events_data = json.loads(content)
-                print(f"DEBUG: Parsed JSON: {events_data}")
                 
-                # Validate and convert to Event objects
+                # Create Event objects from parsed data
                 events = []
-                for event_dict in events_data:
-                    # Parse datetimes
-                    event_dict["start_time"] = date_parser.parse(event_dict["start_time"])
-                    event_dict["end_time"] = date_parser.parse(event_dict["end_time"])
-                    # Auto-correct end_time if needed
-                    if event_dict["end_time"] <= event_dict["start_time"]:
-                        event_dict["end_time"] = event_dict["start_time"] + timedelta(hours=1)
-                    events.append(Event(**event_dict))
-                print(f"DEBUG: Created {len(events)} events")
+                for event_data in events_data:
+                    try:
+                        # Parse datetime strings and ensure timezone awareness
+                        start_time = date_parser.parse(event_data['start_time'])
+                        end_time = date_parser.parse(event_data['end_time'])
+                        
+                        # Ensure timezone awareness
+                        if start_time.tzinfo is None:
+                            start_time = start_time.replace(tzinfo=timezone.utc)
+                        if end_time.tzinfo is None:
+                            end_time = end_time.replace(tzinfo=timezone.utc)
+                        
+                        # Auto-correct end_time if needed
+                        if end_time <= start_time:
+                            end_time = start_time + timedelta(hours=1)
+                        
+                        # Create EventCreate object
+                        event_create = EventCreate(
+                            title=event_data['title'],
+                            description=event_data.get('description'),
+                            start_time=start_time,
+                            end_time=end_time,
+                            location=event_data.get('location', '')
+                        )
+                        
+                        # Create and save event
+                        event = await self.create_event(event_create)
+                        events.append(event)
+                        
+                    except Exception as e:
+                        print(f"DEBUG: Error creating event from parsed data: {e}")
+                        continue
+                
                 return events
             except Exception as e:
                 print(f"DEBUG: JSON parsing error: {e}")
