@@ -2,7 +2,7 @@
 
 A full-stack, AI-powered event management system that parses unstructured event text, detects conflicts, and manages your calendar in real time.
 
-## 🚀 Features
+## Features
 
 - **LLM-Powered Parsing:** Converts natural language (emails, texts, etc.) into structured events using OpenAI GPT-3.5-turbo.
 - **Smart Date Handling:** The system interprets 'today' and other relative dates as your real current date, so events are always scheduled relative to when you use the app.
@@ -11,12 +11,12 @@ A full-stack, AI-powered event management system that parses unstructured event 
 - **Modern UI:** Built with Next.js 14 and Tailwind CSS for a beautiful, responsive experience.
 - **Live System Stats:** See total events, recent creations, and more in real time.
 
-## 🛠️ Tech Stack
+## Tech Stack
 - **Backend:** FastAPI, Python, OpenAI API
 - **Frontend:** Next.js 14, React, Tailwind CSS
 - **Persistence:** JSON file storage (easy to demo, no DB required)
 
-## ⚡ How to Run
+## How to Run
 
 1. **Clone the repo:**
    ```sh
@@ -42,7 +42,7 @@ A full-stack, AI-powered event management system that parses unstructured event 
 5. **Open the app:**
    - Go to [http://localhost:3000](http://localhost:3000)
 
-## 🎬 Demo Flow
+## Demo Flow
 
 1. **Try the Event Parser:**
    - Enter text like `Meeting today at 2pm` or `Lunch with Sarah Friday noon` and click **Parse Events**.
@@ -57,12 +57,6 @@ A full-stack, AI-powered event management system that parses unstructured event 
    - Conflicting events are flagged, and newly created events are highlighted for 30 seconds.
 5. **Delete Events:**
    - Use the trash icon to remove events instantly.
-
-## 💡 Why This Rocks
-- **Real-world simulation:** Handles async, real-time event ingestion like a production system.
-- **AI at the core:** Uses LLMs for robust, flexible event parsing.
-- **Beautiful, modern UX:** Demo-ready for any audience.
-- **Date-aware:** Always parses events relative to your current date.
 
 ---
 
