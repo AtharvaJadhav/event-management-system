@@ -16,6 +16,7 @@ from fastapi import HTTPException, status
 
 # Google Calendar integration
 from .google_calendar import google_calendar_service
+from .mcp_client import mcp_client
 
 # Load environment variables from project root
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
@@ -53,7 +54,8 @@ class EventService:
     def _google_calendar_available(self) -> bool:
         """Check if Google Calendar is available and authenticated"""
         try:
-            return google_calendar_service.service is not None
+            # Try MCP client first, fallback to direct API
+            return mcp_client.initialized or google_calendar_service.service is not None
         except:
             return False
 
@@ -84,14 +86,63 @@ class EventService:
             print(f"Error converting Google event: {e}")
             raise
 
-    def get_all_events(self) -> List[Event]:
-        """Get all events - try Google Calendar first, fallback to JSON"""
+    def _convert_mcp_event_to_event(self, mcp_event: Dict[str, Any]) -> Event:
+        """Convert MCP event format to our Event model"""
+        try:
+            # MCP events have different structure
+            start_time = date_parser.parse(mcp_event['start']['dateTime'] if 'dateTime' in mcp_event['start'] else mcp_event['start']['date'])
+            end_time = date_parser.parse(mcp_event['end']['dateTime'] if 'dateTime' in mcp_event['end'] else mcp_event['end']['date'])
+            
+            # Create Event object
+            event_data = {
+                'id': mcp_event['id'],
+                'title': mcp_event['summary'],
+                'description': mcp_event.get('description'),
+                'start_time': start_time,
+                'end_time': end_time,
+                'location': mcp_event.get('location'),
+                'priority': 'medium',  # Default for Google Calendar events
+                'status': 'confirmed',  # Default for Google Calendar events
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow(),
+                'google_calendar_id': mcp_event['id']
+            }
+            
+            return Event(**event_data)
+        except Exception as e:
+            print(f"Error converting MCP event: {e}")
+            raise
+
+    async def get_all_events(self) -> List[Event]:
+        """Get all events - try MCP client first, then direct API, fallback to JSON"""
         events = []
         
-        # Try Google Calendar first
+        # Try MCP client first
+        if mcp_client.initialized:
+            try:
+                print("DEBUG: Fetching events via MCP client")
+                mcp_events = await mcp_client.list_events()
+                
+                for mcp_event in mcp_events:
+                    try:
+                        # Since MCP client returns the same format as Google Calendar service,
+                        # use the Google Calendar conversion method
+                        event = self._convert_google_event_to_event(mcp_event)
+                        events.append(event)
+                    except Exception as e:
+                        print(f"DEBUG: Error converting MCP event {mcp_event.get('title', 'Unknown')}: {e}")
+                        continue
+                
+                print(f"DEBUG: Loaded {len(events)} events via MCP client")
+                return events
+                
+            except Exception as e:
+                print(f"DEBUG: MCP client failed, trying direct API: {e}")
+        
+        # Try direct Google Calendar API
         if self._google_calendar_available():
             try:
-                print("DEBUG: Fetching events from Google Calendar")
+                print("DEBUG: Fetching events from Google Calendar (direct API)")
                 google_events = google_calendar_service.get_events()
                 
                 for google_event in google_events:
@@ -123,14 +174,26 @@ class EventService:
         
         return events
 
-    def get_event_by_id(self, event_id: str) -> Optional[Event]:
-        """Get event by ID - try Google Calendar first, then JSON"""
-        # Try Google Calendar first
+    async def get_event_by_id(self, event_id: str) -> Optional[Event]:
+        """Get event by ID - try MCP client first, then direct API, then JSON"""
+        # Try MCP client first
+        if mcp_client.initialized:
+            try:
+                # Note: This would need a specific MCP API call
+                # For now, get all events and filter
+                all_events = await self.get_all_events()
+                for event in all_events:
+                    if event.id == event_id:
+                        return event
+            except Exception as e:
+                print(f"DEBUG: MCP client lookup failed: {e}")
+        
+        # Try direct Google Calendar API
         if self._google_calendar_available():
             try:
                 # Note: This would need a specific Google Calendar API call
                 # For now, get all events and filter
-                all_events = self.get_all_events()
+                all_events = await self.get_all_events()
                 for event in all_events:
                     if event.id == event_id:
                         return event
@@ -144,24 +207,53 @@ class EventService:
                 return Event(**event_data)
         return None
 
-    def create_event(self, event: EventCreate) -> Event:
-        """Create a new event - try Google Calendar first, fallback to JSON"""
+    async def create_event(self, event: EventCreate) -> Event:
+        """Create a new event - try MCP client first, then direct API, fallback to JSON"""
         print("DEBUG: EventCreate dict:", event.dict())
         new_event = Event(**event.dict())
         print("DEBUG: Event model created:", new_event)
         
         # Check for conflicts
-        conflicts = self.detect_conflicts(new_event)
+        conflicts = await self.detect_conflicts(new_event)
         if conflicts:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"message": "Event time conflicts with existing event(s)", "conflicts": conflicts}
             )
         
-        # Try Google Calendar first
+        # Try MCP client first
+        if mcp_client.initialized:
+            try:
+                print("DEBUG: Creating event via MCP client")
+                mcp_event_data = {
+                    'summary': event.title,
+                    'description': event.description,
+                    'start': {
+                        'dateTime': event.start_time.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event.end_time.isoformat(),
+                        'timeZone': 'UTC'
+                    }
+                }
+                if event.location:
+                    mcp_event_data['location'] = event.location
+                
+                mcp_event = await mcp_client.create_event(mcp_event_data)
+                if mcp_event:
+                    # Update our event with Google Calendar ID
+                    new_event.id = mcp_event['id']
+                    new_event.google_calendar_id = mcp_event['id']
+                    print(f"DEBUG: Created event via MCP client: {new_event.title}")
+                    return new_event
+            except Exception as e:
+                print(f"DEBUG: MCP client creation failed, trying direct API: {e}")
+        
+        # Try direct Google Calendar API
         if self._google_calendar_available():
             try:
-                print("DEBUG: Creating event in Google Calendar")
+                print("DEBUG: Creating event in Google Calendar (direct API)")
                 google_event = google_calendar_service.create_event(event)
                 if google_event:
                     # Update our event with Google Calendar ID
@@ -202,13 +294,26 @@ class EventService:
                 return Event(**events_data[i])
         return None
 
-    def delete_event(self, event_id: str) -> bool:
-        """Delete an event - try Google Calendar first, fallback to JSON"""
-        # Try Google Calendar first
+    async def delete_event(self, event_id: str) -> bool:
+        """Delete an event - try MCP client first, then direct API, fallback to JSON"""
+        # Try MCP client first
+        if mcp_client.initialized:
+            try:
+                # Check if this is a Google Calendar event
+                event = await self.get_event_by_id(event_id)
+                if event and hasattr(event, 'google_calendar_id') and event.google_calendar_id:
+                    success = await mcp_client.delete_event("primary", event.google_calendar_id)
+                    if success:
+                        print(f"DEBUG: Deleted event via MCP client: {event.title}")
+                        return True
+            except Exception as e:
+                print(f"DEBUG: MCP client deletion failed, trying direct API: {e}")
+        
+        # Try direct Google Calendar API
         if self._google_calendar_available():
             try:
                 # Check if this is a Google Calendar event
-                event = self.get_event_by_id(event_id)
+                event = await self.get_event_by_id(event_id)
                 if event and hasattr(event, 'google_calendar_id') and event.google_calendar_id:
                     success = google_calendar_service.delete_event(event.google_calendar_id)
                     if success:
@@ -226,12 +331,12 @@ class EventService:
                 return True
         return False
 
-    def detect_conflicts(self, new_event: Event, exclude_event_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def detect_conflicts(self, new_event: Event, exclude_event_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Detect scheduling conflicts with existing events"""
         print("DEBUG: Starting detect_conflicts")
         conflicts = []
         try:
-            existing_events = self.get_all_events()
+            existing_events = await self.get_all_events()
             print(f"DEBUG: Loaded {len(existing_events)} existing events")
             for existing_event in existing_events:
                 if exclude_event_id and existing_event.id == exclude_event_id:
@@ -251,10 +356,10 @@ class EventService:
             raise
         return conflicts
 
-    def check_conflicts(self, event: EventCreate) -> List[Dict[str, Any]]:
+    async def check_conflicts(self, event: EventCreate) -> List[Dict[str, Any]]:
         """Check for conflicts without creating event"""
         new_event = Event(**event.dict())
-        return self.detect_conflicts(new_event)
+        return await self.detect_conflicts(new_event)
 
     def get_storage_status(self) -> Dict[str, Any]:
         """Get the current storage status (Google Calendar vs JSON)"""

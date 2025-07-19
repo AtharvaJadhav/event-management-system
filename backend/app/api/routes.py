@@ -22,7 +22,7 @@ async def health_check():
 async def get_events():
     """Get all events"""
     try:
-        events = event_service.get_all_events()
+        events = await event_service.get_all_events()
         # Serialize all events
         events_serialized = []
         for event in events:
@@ -51,7 +51,7 @@ async def get_storage_status():
 @router.get("/events/{event_id}", response_model=Event)
 async def get_event(event_id: str):
     """Get event by ID"""
-    event = event_service.get_event_by_id(event_id)
+    event = await event_service.get_event_by_id(event_id)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -63,7 +63,7 @@ async def get_event(event_id: str):
 @router.post("/events/conflicts")
 async def check_event_conflicts(event: EventCreate):
     """Check for conflicts before creating an event"""
-    conflicts = event_service.check_conflicts(event)
+    conflicts = await event_service.check_conflicts(event)
     if conflicts:
         return {"conflicts": conflicts, "has_conflict": True}
     return {"conflicts": [], "has_conflict": False}
@@ -72,7 +72,7 @@ async def check_event_conflicts(event: EventCreate):
 async def create_event(event: EventCreate, request: Request):
     """Create a new event, prevent conflicts"""
     try:
-        created_event = event_service.create_event(event)
+        created_event = await event_service.create_event(event)
         # Serialize the event for response
         event_dict = created_event.dict()
         event_dict["start_time"] = event_dict["start_time"].isoformat()
@@ -106,7 +106,7 @@ async def update_event(event_id: str, event_update: EventUpdate):
         )
     
     # Check for conflicts after update
-    conflicts = event_service.detect_conflicts(event, exclude_event_id=event_id)
+    conflicts = await event_service.detect_conflicts(event, exclude_event_id=event_id)
     if conflicts:
         # In a real application, you might want to return conflicts as warnings
         pass
@@ -117,7 +117,7 @@ async def update_event(event_id: str, event_update: EventUpdate):
 @router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(event_id: str):
     """Delete an event"""
-    success = event_service.delete_event(event_id)
+    success = await event_service.delete_event(event_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -136,7 +136,7 @@ async def parse_event_text(request: EventParseRequest):
             try:
                 # Convert Event to EventCreate and save
                 event_create = EventCreate(**event.dict())
-                saved_event = event_service.create_event(event_create)
+                saved_event = await event_service.create_event(event_create)
                 print(f"DEBUG: Saved event to JSON: {saved_event.title}")
                 saved_events.append(saved_event)
             except HTTPException as e:
@@ -183,9 +183,9 @@ async def parse_and_create_events(request: EventParseRequest):
     created_events = []
     for event in events:
         # Check for conflicts before creating
-        conflicts = event_service.detect_conflicts(event)
+        conflicts = await event_service.detect_conflicts(event)
         if not conflicts:  # Only create if no conflicts
-            created_event = event_service.create_event(EventCreate(**event.dict()))
+            created_event = await event_service.create_event(EventCreate(**event.dict()))
             created_events.append(created_event)
     
     return created_events 
